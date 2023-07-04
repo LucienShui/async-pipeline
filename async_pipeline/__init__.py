@@ -1,1 +1,1 @@
-from .core import Node, ProcessConsumer, ThreadConsumer, ProgressCenter, Item
+from .core import Node, ProcessConsumer, ThreadConsumer, ProgressCenter, Item, Pipeline

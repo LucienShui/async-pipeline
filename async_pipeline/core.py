@@ -1,6 +1,6 @@
 from multiprocessing import Process, Queue
 from threading import Thread
-from typing import List, Any, Dict, Callable, Union
+from typing import List, Any, Dict, Callable, Union, Tuple
 
 from tqdm import tqdm
 
@@ -10,9 +10,10 @@ class End:
 
 
 class Item(object):
-    def __init__(self, value: Any, channel: str = 'default'):
-        self.channel = channel
-        self.value = value
+    def __init__(self, value: Any, channel: str = 'default', is_batch: bool = False):
+        self.value: Any = value
+        self.channel: str = channel
+        self.is_batch: bool = is_batch
 
 
 class NodeBase(object):
@@ -51,7 +52,7 @@ class MixIn(NodeBase):
             output = self.process(item)
             if output is not None:  # 返回 None 代表不需要入队
                 for queue in self.output_queue_dict.values():
-                    queue.put(Item(output, self.channel))
+                    queue.put(Item(output, self.channel, item.is_batch))
 
 
 class ThreadConsumer(MixIn, Thread):
@@ -68,9 +69,8 @@ class ProcessConsumer(MixIn, Process):
 
 
 class ProgressCenter(ThreadConsumer):
-    def __init__(self, node_list: List[NodeBase], total: int = None, batch: bool = True, *args, **kwargs):
+    def __init__(self, node_list: List[NodeBase], total: int = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.batch: bool = batch
         self.bar_dict: Dict[str, tqdm] = {}
 
         for i, node in enumerate(node_list):
@@ -82,7 +82,7 @@ class ProgressCenter(ThreadConsumer):
         return self.bar_dict[channel]
 
     def process(self, item: Item):
-        self[item.channel].update(len(item.value) if self.batch else 1)
+        self[item.channel].update(len(item.value) if item.is_batch else 1)
 
 
 class Node(NodeBase):
@@ -100,6 +100,15 @@ class Node(NodeBase):
                *args, **kwargs):
         return cls([factory(*args, **kwargs) for _ in range(n)], channel=channel or factory.__name__)
 
+    @classmethod
+    def create_with_function(
+            cls, func: Callable[[Item], Any], factory: Callable[[Any], Union[ProcessConsumer, ThreadConsumer]],
+            n: int, channel: str = None, *args, **kwargs):
+        instance_list = [factory(*args, **kwargs) for _ in range(n)]
+        for instance in instance_list:
+            instance.process = func
+        return cls(instance_list, channel=channel or func.__name__)
+
     def start(self):
         for consumer in self.consumer_list:
             consumer.start()
@@ -109,3 +118,38 @@ class Node(NodeBase):
             consumer.input_queue.put(End)
         for consumer in self.consumer_list:
             consumer.join()
+
+
+class Pipeline:
+    def __init__(self, func_list: List[Tuple[Callable[[Item], Any], int]], total: int = None):
+        self.node_list: List[Node] = [Node.create_with_function(func, ProcessConsumer, n) for func, n in func_list]
+
+        self.input_queue = self.node_list[0].input_queue
+        self.output_queue = Queue()
+
+        for i in range(len(self.node_list)):
+            if i + 1 < len(self.node_list):
+                self.node_list[i].to(self.node_list[i + 1])
+            else:
+                self.node_list[i].to(self.output_queue)
+
+        self.progress_center = ProgressCenter(self.node_list, total=total)
+
+    def __call__(self, value: Any, is_batch: bool = False) -> None:
+        self.input_queue.put(Item(value, 'pipeline_input', is_batch=is_batch))
+
+    def get(self) -> Item:
+        return self.output_queue.get()
+
+    def empty(self) -> bool:
+        return self.output_queue.empty()
+
+    def start(self):
+        self.progress_center.start()
+        for node in self.node_list:
+            node.start()
+
+    def stop(self):
+        for node in self.node_list:
+            node.stop()
+        self.progress_center.stop()
