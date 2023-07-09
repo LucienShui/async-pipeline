@@ -32,9 +32,10 @@ class NodeBase(object):
 
 class MixIn(NodeBase):
     def __init__(self, input_queue: Queue = None, output_queue_dict: Dict[str, Queue] = None,
-                 wait_seconds: float = 0.5, *args, **kwargs):
+                 wait_seconds: float = 0.5, thread_id: int = -1, *args, **kwargs):
         super().__init__(input_queue, output_queue_dict, *args, **kwargs)
         self.wait_seconds: float = wait_seconds
+        self.thread_id: int = thread_id
 
     def process(self, item: Item) -> object:
         """
@@ -98,13 +99,13 @@ class Node(NodeBase):
     @classmethod
     def create(cls, factory: Callable[[Any], Union[ProcessConsumer, ThreadConsumer]], n: int, channel: str = None,
                *args, **kwargs):
-        return cls([factory(*args, **kwargs) for _ in range(n)], channel=channel or factory.__name__)
+        return cls([factory(*args, **{**kwargs, 'thread_id': i}) for i in range(n)], channel=channel or factory.__name__)
 
     @classmethod
     def create_with_function(
             cls, func: Callable[[Item], Any], factory: Callable[[Any], Union[ProcessConsumer, ThreadConsumer]],
             n: int, channel: str = None, *args, **kwargs):
-        instance_list = [factory(*args, **kwargs) for _ in range(n)]
+        instance_list = [factory(*args, **{**kwargs, 'thread_id': i}) for i in range(n)]
         for instance in instance_list:
             instance.process = func
         return cls(instance_list, channel=channel or func.__name__)

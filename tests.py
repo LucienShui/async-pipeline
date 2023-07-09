@@ -17,6 +17,7 @@ def multiply(item: Item):
 class Plus(ProcessConsumer):
     def process(self, item: Item) -> object:
         time.sleep(.2)
+        print(self.thread_id)
         return item.value + 1
 
 
@@ -31,7 +32,7 @@ class PipelineTestCase(unittest.TestCase):
         output_queue: Queue[Item] = Queue()
 
         # 创建节点
-        plus_node = Node.create(Plus, 1)
+        plus_node = Node.create(Plus, 2)
         multiply_node = Node.create(Multiply, 1)
 
         plus_node.to(multiply_node)
