@@ -71,6 +71,21 @@ class PipelineTestCase(unittest.TestCase):
 
         self.assertTrue(True)
 
+    def test_class_pipeline(self):
+        pipeline = Pipeline([(Multiply, 2), (Plus, 1)], 16)
+
+        pipeline.start()
+
+        for i in range(16):
+            pipeline(i)
+
+        pipeline.stop()
+
+        while not pipeline.empty():
+            print(pipeline.get().value)
+
+        self.assertTrue(True)
+
 
 if __name__ == '__main__':
     unittest.main()

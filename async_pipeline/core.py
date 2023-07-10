@@ -1,5 +1,6 @@
 from multiprocessing import Process, Queue
 from threading import Thread
+import inspect
 from typing import List, Any, Dict, Callable, Union, Tuple
 
 from tqdm import tqdm
@@ -122,8 +123,13 @@ class Node(NodeBase):
 
 
 class Pipeline:
-    def __init__(self, func_list: List[Tuple[Callable[[Item], Any], int]], total: int = None):
-        self.node_list: List[Node] = [Node.create_with_function(func, ProcessConsumer, n) for func, n in func_list]
+    def __init__(self, factory_list: List[Tuple[Union[Callable[[Item], Any], Callable[[Any], NodeBase]], int]], total: int = None):
+        self.node_list: List[Node] = []
+        for factory, n in factory_list:
+            if inspect.isclass(factory):
+                self.node_list.append(Node.create(factory, n))
+            elif inspect.isfunction(factory):
+                self.node_list.append(Node.create_with_function(factory, ProcessConsumer, n))
 
         self.input_queue = self.node_list[0].input_queue
         self.output_queue = Queue()
@@ -136,8 +142,8 @@ class Pipeline:
 
         self.progress_center = ProgressCenter(self.node_list, total=total)
 
-    def __call__(self, value: Any, is_batch: bool = False) -> None:
-        self.input_queue.put(Item(value, 'pipeline_input', batch_size=is_batch))
+    def __call__(self, value: Any, batch_size: int = 1) -> None:
+        self.input_queue.put(Item(value, 'pipeline_input', batch_size=batch_size))
 
     def get(self) -> Item:
         return self.output_queue.get()
