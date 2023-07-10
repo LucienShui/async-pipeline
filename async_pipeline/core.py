@@ -10,10 +10,10 @@ class End:
 
 
 class Item(object):
-    def __init__(self, value: Any, channel: str = 'default', is_batch: bool = False):
+    def __init__(self, value: Any, channel: str = 'default', batch_size: int = 1):
         self.value: Any = value
         self.channel: str = channel
-        self.is_batch: bool = is_batch
+        self.batch_size: int = batch_size
 
 
 class NodeBase(object):
@@ -53,7 +53,7 @@ class MixIn(NodeBase):
             output = self.process(item)
             if output is not None:  # 返回 None 代表不需要入队
                 for queue in self.output_queue_dict.values():
-                    queue.put(Item(output, self.channel, item.is_batch))
+                    queue.put(Item(output, self.channel, item.batch_size))
 
 
 class ThreadConsumer(MixIn, Thread):
@@ -83,7 +83,7 @@ class ProgressCenter(ThreadConsumer):
         return self.bar_dict[channel]
 
     def process(self, item: Item):
-        self[item.channel].update(len(item.value) if item.is_batch else 1)
+        self[item.channel].update(item.batch_size)
 
 
 class Node(NodeBase):
@@ -137,7 +137,7 @@ class Pipeline:
         self.progress_center = ProgressCenter(self.node_list, total=total)
 
     def __call__(self, value: Any, is_batch: bool = False) -> None:
-        self.input_queue.put(Item(value, 'pipeline_input', is_batch=is_batch))
+        self.input_queue.put(Item(value, 'pipeline_input', batch_size=is_batch))
 
     def get(self) -> Item:
         return self.output_queue.get()
