@@ -100,7 +100,8 @@ class Node(NodeBase):
     @classmethod
     def create(cls, factory: Callable[[Any], Union[ProcessConsumer, ThreadConsumer]], n: int, channel: str = None,
                *args, **kwargs):
-        return cls([factory(*args, **{**kwargs, 'thread_id': i}) for i in range(n)], channel=channel or factory.__name__)
+        return cls([factory(*args, **{**kwargs, 'thread_id': i}) for i in range(n)],
+                   channel=channel or factory.__name__)
 
     @classmethod
     def create_with_function(
@@ -123,13 +124,16 @@ class Node(NodeBase):
 
 
 class Pipeline:
-    def __init__(self, factory_list: List[Tuple[Union[Callable[[Item], Any], Callable[[Any], NodeBase]], int]], total: int = None):
+    def __init__(
+            self,
+            factory_list: List[Tuple[Union[Callable[[Item], Any], Callable[[Any], NodeBase]], int, Dict[str, Any]]],
+            total: int = None):
         self.node_list: List[Node] = []
-        for factory, n in factory_list:
+        for factory, n, kwargs in factory_list:
             if inspect.isclass(factory):
-                self.node_list.append(Node.create(factory, n))
+                self.node_list.append(Node.create(factory, n, **kwargs))
             elif inspect.isfunction(factory):
-                self.node_list.append(Node.create_with_function(factory, ProcessConsumer, n))
+                self.node_list.append(Node.create_with_function(factory, ProcessConsumer, n, **kwargs))
 
         self.input_queue = self.node_list[0].input_queue
         self.output_queue = Queue()
