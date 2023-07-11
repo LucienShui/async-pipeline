@@ -21,9 +21,13 @@ class Plus(ProcessConsumer):
 
 
 class Multiply(ProcessConsumer):
+    def __init__(self, factor: int = 3, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.factor = factor
+
     def process(self, item: Item) -> object:
         time.sleep(.3)
-        return item.value * 3
+        return item.value * self.factor
 
 
 class PipelineTestCase(unittest.TestCase):
@@ -56,7 +60,7 @@ class PipelineTestCase(unittest.TestCase):
         self.assertTrue(True)
 
     def test_func_pipeline(self):
-        pipeline = Pipeline([(multiply, 1), (plus, 1)], 16)
+        pipeline = Pipeline.from_legacy([(multiply, 1, {}), (plus, 1, {})], 16)
 
         pipeline.start()
 
@@ -71,11 +75,32 @@ class PipelineTestCase(unittest.TestCase):
         self.assertTrue(True)
 
     def test_class_pipeline(self):
-        pipeline = Pipeline([(Multiply, 2), (Plus, 1)], 16)
+        pipeline = Pipeline.from_legacy([(Multiply, 2, {}), (Plus, 1, {})], 16)
 
         pipeline.start()
 
         for i in range(16):
+            pipeline(i)
+
+        pipeline.stop()
+
+        while not pipeline.empty():
+            print(pipeline.get().value)
+
+        self.assertTrue(True)
+
+    def test_from_config(self):
+        total = 16
+        pipeline = Pipeline.from_config([
+            {"n": 1, "class": Plus},
+            {"n": 1, "func": multiply},
+            {"n": 1, "worker": {"func": plus}},
+            {"n": 1, "worker": {"class": Multiply, "factor": 2}}
+        ], total)
+
+        pipeline.start()
+
+        for i in range(total):
             pipeline(i)
 
         pipeline.stop()

@@ -1,9 +1,18 @@
 from multiprocessing import Process, Queue
+from copy import deepcopy
 from threading import Thread
 import inspect
 from typing import List, Any, Dict, Callable, Union, Tuple
 
 from tqdm import tqdm
+
+CONFIG_TEMPLATE = {
+    "n": 1,
+    "worker": {
+        "class": None,
+        "func": None
+    }
+}
 
 
 class End:
@@ -18,9 +27,10 @@ class Item(object):
 
 
 class NodeBase(object):
-    def __init__(self, input_queue: Queue = None, output_queue_dict: Dict[str, Queue] = None, channel: str = None):
+    def __init__(self, input_queue: Queue = None,
+                 output_queue_dict: Dict[str, Queue] = None, channel: str = None, input_queue_max_size: int = 0):
         super().__init__()
-        self.input_queue: Queue = input_queue or Queue()
+        self.input_queue: Queue = input_queue or Queue(maxsize=input_queue_max_size)
         self.output_queue_dict: Dict[str, Queue] = output_queue_dict or {}
         self.channel: str = channel or self.__class__.__name__
 
@@ -96,9 +106,15 @@ class ProgressCenter(ThreadConsumer):
         self[item.channel].update(item.batch_size)
 
 
+def coalesce(*args) -> str:
+    for each in args:
+        if each is not None:
+            return each.__name__
+
+
 class Node(NodeBase):
-    def __init__(self, consumer_list: List[Union[ProcessConsumer, ThreadConsumer]], channel: str):
-        super().__init__(channel=channel)
+    def __init__(self, consumer_list: List[Union[ProcessConsumer, ThreadConsumer]], *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.consumer_list: List[Union[ProcessConsumer, ThreadConsumer]] = consumer_list
 
         for consumer in self.consumer_list:
@@ -121,6 +137,27 @@ class Node(NodeBase):
             instance.process = func
         return cls(instance_list, channel=channel or func.__name__)
 
+    @classmethod
+    def from_config(cls, config: dict) -> "Node":
+        config = deepcopy(config)
+        n = config.pop('n')
+        worker_config = config.pop('worker', {})
+        factory = config.pop('class', worker_config.pop('class', None))
+        func = config.pop('func', worker_config.pop('func', None))
+
+        if factory is None:
+            if func is not None:
+                factory = ProcessConsumer
+            else:
+                raise AssertionError("class and func can't be None at the same time")
+        config.setdefault('channel', coalesce(func, factory))
+
+        instance_list = [factory(**{**worker_config, 'thread_id': i}) for i in range(n)]
+        if func is not None:
+            for instance in instance_list:
+                instance.process = func
+        return cls(instance_list, **config)
+
     def start(self):
         for consumer in self.consumer_list:
             consumer.start()
@@ -133,17 +170,9 @@ class Node(NodeBase):
 
 
 class Pipeline:
-    def __init__(
-            self,
-            factory_list: List[Tuple[Union[Callable[[Item], Any], Callable[[Any], NodeBase]], int, Dict[str, Any]]],
-            total: int = None):
-        self.node_list: List[Node] = []
-        for factory, n, kwargs in factory_list:
-            if inspect.isclass(factory):
-                self.node_list.append(Node.create(factory, n, **kwargs))
-            elif inspect.isfunction(factory):
-                self.node_list.append(Node.create_with_function(factory, ProcessConsumer, n, **kwargs))
-
+    def __init__(self, node_list: List[Node], total: int = None):
+        self.node_list: List[Node] = node_list
+        self.total: int = total
         self.input_queue = self.node_list[0].input_queue
         self.output_queue = Queue()
 
@@ -153,7 +182,26 @@ class Pipeline:
             else:
                 self.node_list[i].to(self.output_queue)
 
-        self.progress_center = ProgressCenter(self.node_list, total=total)
+        self.progress_center = ProgressCenter(self.node_list, total=self.total)
+
+    @classmethod
+    def from_config(cls, config_list: List[Dict[str, Any]], total: int = None) -> "Pipeline":
+        node_list: List[Node] = [Node.from_config(config) for config in config_list]
+        return cls(node_list, total)
+
+    @classmethod
+    def from_legacy(
+            cls,
+            factory_list: List[Tuple[Union[Callable[[Item], Any], Callable[[Any], NodeBase]], int, Dict[str, Any]]],
+            total: int = None
+    ) -> "Pipeline":
+        node_list = []
+        for factory, n, kwargs in factory_list:
+            if inspect.isclass(factory):
+                node_list.append(Node.create(factory, n, **kwargs))
+            elif inspect.isfunction(factory):
+                node_list.append(Node.create_with_function(factory, ProcessConsumer, n, **kwargs))
+        return cls(node_list, total)
 
     def __call__(self, value: Any, batch_size: int = 1) -> None:
         self.input_queue.put(Item(value, 'pipeline_input', batch_size=batch_size))
@@ -174,7 +222,6 @@ class Pipeline:
         bar: tqdm = self.progress_center.bar_dict[self.node_list[-1].channel]
         if bar.total is not None:
             while bar.n < bar.total:
-                print(f'{bar.n}/{bar.total}')
                 time.sleep(1)
                 continue
         for node in self.node_list:
