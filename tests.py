@@ -93,9 +93,9 @@ class PipelineTestCase(unittest.TestCase):
         total = 16
         pipeline = Pipeline.from_config([
             {"n": 1, "class": Plus},
-            {"n": 1, "func": multiply},
+            {"func": multiply},
             {"n": 1, "worker": {"func": plus}},
-            {"n": 1, "worker": {"class": Multiply, "factor": 2}}
+            {"worker": {"class": Multiply, "factor": 2}}
         ], total)
 
         pipeline.start()

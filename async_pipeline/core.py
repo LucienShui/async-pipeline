@@ -140,7 +140,7 @@ class Node(NodeBase):
     @classmethod
     def from_config(cls, config: dict) -> "Node":
         config = deepcopy(config)
-        n = config.pop('n')
+        n = config.pop('n', 1)
         worker_config = config.pop('worker', {})
         factory = config.pop('class', worker_config.pop('class', None))
         func = config.pop('func', worker_config.pop('func', None))
