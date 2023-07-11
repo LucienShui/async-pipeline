@@ -55,6 +55,9 @@ class MixIn(NodeBase):
         """
         raise NotImplementedError
 
+    def init(self):
+        pass
+
     def stop(self: Union[Thread, Process, "MixIn"]) -> None:
         self.input_queue.put(End)
         self.join()
@@ -64,6 +67,7 @@ class MixIn(NodeBase):
             queue.put(Item(value, self.channel, batch_size))
 
     def run(self) -> None:
+        self.init()
         for item in iter(self.input_queue.get, End):
             result = self.process(item)
             if result is not None:  # 返回 None 代表不需要入队
