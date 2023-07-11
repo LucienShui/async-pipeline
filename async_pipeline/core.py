@@ -49,12 +49,15 @@ class MixIn(NodeBase):
         self.input_queue.put(End)
         self.join()
 
+    def output(self, value: Any, batch_size: int) -> None:
+        for queue in self.output_queue_dict.values():
+            queue.put(Item(value, self.channel, batch_size))
+
     def run(self) -> None:
         for item in iter(self.input_queue.get, End):
-            output = self.process(item)
-            if output is not None:  # 返回 None 代表不需要入队
-                for queue in self.output_queue_dict.values():
-                    queue.put(Item(output, self.channel, item.batch_size))
+            result = self.process(item)
+            if result is not None:  # 返回 None 代表不需要入队
+                self.output(result, item.batch_size)
 
 
 class ThreadConsumer(MixIn, Thread):
