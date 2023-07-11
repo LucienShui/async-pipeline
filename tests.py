@@ -17,7 +17,6 @@ def multiply(item: Item):
 class Plus(ProcessConsumer):
     def process(self, item: Item) -> object:
         time.sleep(.2)
-        print(self.thread_id)
         return item.value + 1
 
 

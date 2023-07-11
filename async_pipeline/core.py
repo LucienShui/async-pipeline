@@ -74,14 +74,20 @@ class ProgressCenter(ThreadConsumer):
     def __init__(self, node_list: List[NodeBase], total: int = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.bar_dict: Dict[str, tqdm] = {}
+        self.node_channel_list: List[str] = []
 
         for i, node in enumerate(node_list):
             node.to(self)
             bar = tqdm(total=total, desc=node.channel, position=i)
             self.bar_dict[node.channel] = bar
+            self.node_channel_list.append(node.channel)
 
-    def __getitem__(self, channel: str) -> tqdm:
-        return self.bar_dict[channel]
+    def __getitem__(self, idx: Union[str, int]) -> tqdm:
+        if isinstance(idx, str):
+            return self.bar_dict[idx]
+        elif isinstance(idx, int):
+            return self.bar_dict[self.node_channel_list[idx]]
+        raise AssertionError(f'type of idx {type(idx)} not belongs to [str, int]')
 
     def process(self, item: Item):
         self[item.channel].update(item.batch_size)
@@ -161,6 +167,13 @@ class Pipeline:
             node.start()
 
     def stop(self):
+        import time
+        bar: tqdm = self.progress_center.bar_dict[self.node_list[-1].channel]
+        if bar.total is not None:
+            while bar.n < bar.total:
+                print(f'{bar.n}/{bar.total}')
+                time.sleep(1)
+                continue
         for node in self.node_list:
             node.stop()
         self.progress_center.stop()
