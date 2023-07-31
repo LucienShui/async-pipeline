@@ -1,4 +1,6 @@
-from multiprocessing import Process, Queue
+from multiprocessing import Process, JoinableQueue as Queue
+import time
+from queue import Empty
 from copy import deepcopy
 from threading import Thread
 import inspect
@@ -68,10 +70,18 @@ class MixIn(NodeBase):
 
     def run(self) -> None:
         self.init()
-        for item in iter(self.input_queue.get, End):
-            result = self.process(item)
-            if result is not None:  # 返回 None 代表不需要入队
-                self.output(result, item.batch_size)
+        while True:
+            try:
+                item: Item = self.input_queue.get(timeout=self.wait_seconds)
+                if item is End:
+                    self.input_queue.task_done()
+                    break
+                result = self.process(item)
+                if result is not None:  # 返回 None 代表不需要入队
+                    self.output(result, item.batch_size)
+                self.input_queue.task_done()
+            except Empty:
+                time.sleep(self.wait_seconds)
 
 
 class ThreadConsumer(MixIn, Thread):
@@ -167,8 +177,11 @@ class Node(NodeBase):
             consumer.start()
 
     def stop(self):
-        for consumer in self.consumer_list:
-            consumer.input_queue.put(End)
+        for i in range(len(self.consumer_list)):
+            self.input_queue.join()
+            self.input_queue.put(End)
+        self.input_queue.join()
+
         for consumer in self.consumer_list:
             consumer.join()
 
@@ -222,12 +235,6 @@ class Pipeline:
             node.start()
 
     def stop(self):
-        import time
-        bar: tqdm = self.progress_center.bar_dict[self.node_list[-1].channel]
-        if bar.total is not None:
-            while bar.n < bar.total:
-                time.sleep(1)
-                continue
         for node in self.node_list:
             node.stop()
         self.progress_center.stop()
