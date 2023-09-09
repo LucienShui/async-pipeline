@@ -21,6 +21,10 @@ class End:
     pass
 
 
+class Retry(Exception):
+    pass
+
+
 class Item(object):
     def __init__(self, value: Any, channel: str = 'default', batch_size: int = 1):
         self.value: Any = value
@@ -45,10 +49,11 @@ class NodeBase(object):
 
 class MixIn(NodeBase):
     def __init__(self, input_queue: Queue = None, output_queue_dict: Dict[str, Queue] = None,
-                 wait_seconds: float = 0.5, thread_id: int = -1, *args, **kwargs):
+                 wait_seconds: float = 0.5, thread_id: int = -1, retry: bool = True, *args, **kwargs):
         super().__init__(input_queue, output_queue_dict, *args, **kwargs)
         self.wait_seconds: float = wait_seconds
         self.thread_id: int = thread_id
+        self.retry: bool = retry
 
     def process(self, item: Item) -> object:
         """
@@ -70,18 +75,28 @@ class MixIn(NodeBase):
 
     def run(self) -> None:
         self.init()
-        while True:
+        loop_flag = True
+        while loop_flag or not self.input_queue.empty():
             try:
                 item: Item = self.input_queue.get(timeout=self.wait_seconds)
-                if item is End:
-                    self.input_queue.task_done()
-                    break
-                result = self.process(item)
-                if result is not None:  # 返回 None 代表不需要入队
-                    self.output(result, item.batch_size)
-                self.input_queue.task_done()
             except Empty:
                 time.sleep(self.wait_seconds)
+                continue
+            try:
+                if item is End:
+                    if loop_flag:
+                        loop_flag = False
+                    else:
+                        raise Retry('end')
+                else:
+                    result = self.process(item)
+                    if result is not None:  # 返回 None 代表不需要入队
+                        self.output(result, item.batch_size)
+            except (Retry, Exception) as e:
+                if isinstance(e, Retry) or self.retry:
+                    self.input_queue.put(item)
+
+            self.input_queue.task_done()
 
 
 class ThreadConsumer(MixIn, Thread):
@@ -178,7 +193,6 @@ class Node(NodeBase):
 
     def stop(self):
         for i in range(len(self.consumer_list)):
-            self.input_queue.join()
             self.input_queue.put(End)
         self.input_queue.join()
 

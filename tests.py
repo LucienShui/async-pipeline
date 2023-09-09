@@ -1,4 +1,3 @@
-import os.path
 import unittest
 from async_pipeline import Node, ProcessConsumer, ProgressCenter, Item, Pipeline
 from multiprocessing import Queue
@@ -110,6 +109,26 @@ class PipelineTestCase(unittest.TestCase):
             {"func": multiply},
             {"n": 1, "worker": {"func": plus}},
             {"worker": {"class": Multiply, "factor": 2}}
+        ], total)
+
+        pipeline.start()
+
+        for i in range(total):
+            pipeline(i)
+
+        pipeline.stop()
+
+        while not pipeline.empty():
+            print(pipeline.get().value)
+
+        self.assertTrue(True)
+
+    def test_thread_only(self):
+        from async_pipeline import ThreadConsumer
+        total = 16
+        pipeline = Pipeline.from_config([
+            {"func": multiply, "class": ThreadConsumer},
+            {"func": plus, "class": ThreadConsumer},
         ], total)
 
         pipeline.start()
