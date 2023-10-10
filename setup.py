@@ -8,6 +8,9 @@ this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, 'README.md'), encoding='utf-8') as file:
     long_description = file.read()
 
+with open(path.join(this_directory, 'requirements.txt'), encoding='utf-8') as file:
+    requirements = file.read().split('\n')
+
 setup(
     name=__name__,
     version=__version__,
@@ -15,6 +18,7 @@ setup(
     author_email=__author_email__,
     url=__url__,
     description=__description__,
+    install_requires=requirements,
     packages=['async_pipeline'],
     long_description=long_description,
     long_description_content_type='text/markdown'
