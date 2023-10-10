@@ -1,0 +1,10 @@
+__name__ = 'async-pipeline'
+__description__ = 'Async Pipeline'
+__url__ = 'https://github.com/LucienShui/async-pipeline'
+__version_info__ = (0, 0, 1)
+__version__ = '.'.join(map(str, __version_info__))
+__build__ = eval(f"0x{''.join(map(lambda x: f'{int(x):02d}', __version_info__))}")
+__author__ = 'Lucien Shui'
+__author_email__ = 'lucien@lucien.ink'
+__license__ = 'Apache 2.0'
+__copyright__ = 'Copyright 2023 Lucien Shui'
