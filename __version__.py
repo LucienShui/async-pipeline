@@ -1,0 +1,1 @@
+async_pipeline/__version__.py
