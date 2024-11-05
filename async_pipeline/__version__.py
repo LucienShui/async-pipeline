@@ -1,7 +1,7 @@
 __name__ = 'async-pipeline'
 __description__ = 'Async Pipeline'
 __url__ = 'https://github.com/LucienShui/async-pipeline'
-__version_info__ = (0, 0, 1)
+__version_info__ = (0, 0, 2)
 __version__ = '.'.join(map(str, __version_info__))
 __build__ = eval(f"0x{''.join(map(lambda x: f'{int(x):02d}', __version_info__))}")
 __author__ = 'Lucien Shui'
