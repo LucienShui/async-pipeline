@@ -49,7 +49,7 @@ class NodeBase(object):
 
 class MixIn(NodeBase):
     def __init__(self, input_queue: Queue = None, output_queue_dict: Dict[str, Queue] = None,
-                 wait_seconds: float = 0.5, thread_id: int = -1, retry: bool = True, *args, **kwargs):
+                 wait_seconds: float = 0.5, thread_id: int = -1, retry: bool = False, *args, **kwargs):
         super().__init__(input_queue, output_queue_dict, *args, **kwargs)
         self.wait_seconds: float = wait_seconds
         self.thread_id: int = thread_id
@@ -95,6 +95,8 @@ class MixIn(NodeBase):
             except (Retry, Exception) as e:
                 if isinstance(e, Retry) or self.retry:
                     self.input_queue.put(item)
+                else:
+                    raise e
 
             self.input_queue.task_done()
 
